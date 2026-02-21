@@ -41,7 +41,11 @@ source "$VENV_DIR/bin/activate"
 pip install --upgrade pip --quiet
 
 # Detect CUDA version to pick the right PyTorch wheel
+# Try nvcc first, fall back to nvidia-smi (nvcc is sometimes missing on RunPod)
 CUDA_VER=$(nvcc --version 2>/dev/null | grep -oP 'release \K[0-9]+\.[0-9]+' | head -1)
+if [ -z "$CUDA_VER" ]; then
+    CUDA_VER=$(nvidia-smi 2>/dev/null | grep -oP 'CUDA Version: \K[0-9]+\.[0-9]+' | head -1)
+fi
 echo "  Detected CUDA: ${CUDA_VER:-unknown}"
 
 if [[ "$CUDA_VER" == 11.* ]]; then
@@ -49,11 +53,15 @@ if [[ "$CUDA_VER" == 11.* ]]; then
     echo "  Installing PyTorch for CUDA 11.x..."
 elif [[ "$CUDA_VER" == 12.4* ]] || [[ "$CUDA_VER" == 12.5* ]] || [[ "$CUDA_VER" == 12.6* ]]; then
     TORCH_INDEX="https://download.pytorch.org/whl/cu124"
-    echo "  Installing PyTorch for CUDA 12.4+..."
-else
-    # Default: CUDA 12.1 (most common RunPod template)
+    echo "  Installing PyTorch for CUDA 12.4+ (PyTorch 2.4.0 template)..."
+elif [[ "$CUDA_VER" == 12.1* ]] || [[ "$CUDA_VER" == 12.2* ]] || [[ "$CUDA_VER" == 12.3* ]]; then
     TORCH_INDEX="https://download.pytorch.org/whl/cu121"
-    echo "  Installing PyTorch for CUDA 12.1 (default)..."
+    echo "  Installing PyTorch for CUDA 12.1..."
+else
+    # Fallback: cu124 for PyTorch 2.4.0 template (CUDA 12.4 is most likely on modern RunPod)
+    TORCH_INDEX="https://download.pytorch.org/whl/cu124"
+    echo "  Could not detect CUDA version. Defaulting to cu124 (PyTorch 2.4.0 compatible)."
+    echo "  If this fails, manually set TORCH_INDEX in setup.sh."
 fi
 
 pip install torch torchvision torchaudio --index-url "$TORCH_INDEX" --quiet
